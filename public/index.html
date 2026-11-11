@@ -194,6 +194,7 @@ button.env.wig{animation:envwig 1.2s ease-in-out infinite}
 .fld label i{width:14px;height:14px;border-radius:50%;background:var(--c);flex:none;border:2px solid rgba(91,63,67,.12)}
 .fld input,.fld textarea{font-family:var(--body);font-size:16px;line-height:1.5;color:var(--ink);background:#fff;border:3px solid #FFE0E8;border-radius:16px;padding:10px 12px;width:100%;resize:vertical;-webkit-user-select:text;user-select:text;-webkit-appearance:none;appearance:none}
 .fld input:focus,.fld textarea:focus{outline:none;border-color:var(--berry-deep)}
+.fld input::placeholder,.fld textarea::placeholder{color:#C9B3B6;opacity:1}
 
 /* 3. 쏟아지기 */
 #s2{overflow-y:auto}
@@ -230,6 +231,7 @@ button.env.wig{animation:envwig 1.2s ease-in-out infinite}
       </div>
     </div>
     <button class="btn" id="startBtn">열어보기</button>
+    <button class="btn ghost" id="shareTopBtn" style="margin-top:6px">공유하기</button>
   </section>
 
   <!-- 2. 만들기 -->
@@ -275,7 +277,7 @@ button.env.wig{animation:envwig 1.2s ease-in-out infinite}
   <section class="stage" id="s4">
     <div class="head">
       <h2>문구 바꾸기</h2>
-      <p class="sub">제목 아래 칸에 적으면 그 문구로 바뀌어요</p>
+      <p class="sub">흐린 글씨는 예시예요. 칸을 눌러 바로 적으면 돼요</p>
     </div>
     <div class="edit" id="edit"></div>
     <div class="linkbox" id="linkBox" hidden>
@@ -286,7 +288,7 @@ button.env.wig{animation:envwig 1.2s ease-in-out infinite}
         <button class="btn" id="sendBtn">보내기</button>
       </div>
     </div>
-    <button class="textbtn" id="resetBtn">처음 문구로 되돌리기</button>
+    <button class="textbtn" id="resetBtn">적은 내용 모두 지우기</button>
     <div class="row2">
       <button class="btn ghost" id="applyBtn">미리 해보기</button>
       <button class="btn" id="linkBtn">링크 만들기</button>
@@ -598,6 +600,16 @@ function groups(){
 const allItems = ()=>groups().flatMap(g=>g.items);
 const DEF = {}; allItems().forEach(f=>DEF[f.id] = f.get());
 function setAll(map){ allItems().forEach(f=>{ const v = map[f.id]; if(typeof v==="string" && v.trim()) f.set(v.trim()); }); }
+/* own: 이 브라우저에서 직접 적은 문구만 모아 둔다. 적지 않은 칸은 예시 문구가 쓰인다 */
+let own = {};
+function loadOwn(){
+  try{
+    const saved = JSON.parse(localStorage.getItem(KEY) || "null") || {};
+    Object.keys(DEF).forEach(k=>{ if(typeof saved[k]==="string" && saved[k].trim() && saved[k]!==DEF[k]) own[k] = saved[k].trim(); });
+  }catch(e){}
+}
+function applyOwn(){ const all = {}; Object.keys(DEF).forEach(k=>all[k] = own[k] || DEF[k]); setAll(all); }
+loadOwn();
 /* 링크에 담긴 문구: ?d=... (z=압축, j=그대로) */
 function b64u(bytes){ let t = ""; for(let i=0;i<bytes.length;i++) t += String.fromCharCode(bytes[i]); return btoa(t).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
 function unb64u(str){ const t = atob(str.replace(/-/g,"+").replace(/_/g,"/")); const b = new Uint8Array(t.length); for(let i=0;i<t.length;i++) b[i] = t.charCodeAt(i); return b; }
@@ -626,7 +638,7 @@ if(shared){
   const timer = setTimeout(open, 5000);
   fetch("api/get?id=" + sharedId).then(r=>r.ok ? r.json() : null).then(m=>{ if(m) useShared(m); }).catch(()=>{}).then(()=>{ clearTimeout(timer); open(); });
 }else{
-  try{ const saved = JSON.parse(localStorage.getItem(KEY) || "null"); if(saved) setAll(saved); }catch(e){}
+  applyOwn();
 }
 renderLetter();
 function openEditor(){
@@ -642,7 +654,7 @@ function openEditor(){
       l.appendChild(document.createTextNode(f.label));
       const el = document.createElement(f.rows ? "textarea" : "input");
       el.id = f.id; if(f.rows) el.rows = f.rows; else el.type = "text";
-      el.value = f.get(); el.autocomplete = "off";
+      el.value = own[f.id] || ""; el.placeholder = DEF[f.id]; el.autocomplete = "off";
       w.append(l, el); card.appendChild(w);
     });
     box.appendChild(card);
@@ -652,18 +664,19 @@ function openEditor(){
   show(4);
 }
 function collect(){
-  const map = {};
-  allItems().forEach(f=>{ const el = $(f.id); if(el) map[f.id] = el.value; });
-  setAll(map);
-  const keep = {}; allItems().forEach(f=>keep[f.id] = f.get());
-  try{ localStorage.setItem(KEY, JSON.stringify(keep)); }catch(e){}
+  allItems().forEach(f=>{
+    const el = $(f.id); if(!el) return;
+    const v = el.value.trim();
+    if(v && v!==DEF[f.id]) own[f.id] = v; else delete own[f.id];
+  });
+  applyOwn();
+  try{ localStorage.setItem(KEY, JSON.stringify(own)); }catch(e){}
   renderLetter();
-  return keep;
+  return own;
 }
 let linkUrl = "";
 $("linkBtn").addEventListener("click", async ()=>{
-  const keep = collect(), diff = {};
-  Object.keys(keep).forEach(k=>{ if(keep[k]!==DEF[k]) diff[k] = keep[k]; });
+  const diff = Object.assign({}, collect());
   /* 바꾼 문구는 서버에 저장하고, 링크에는 12자 번호만 넣는다. 저장이 안 되면 문구를 주소에 담은 긴 링크로 대신한다 */
   const base = location.origin + location.pathname;
   let note = "이 링크를 보내면 바꾼 문구로 열려요. 문구는 1년 동안 보관돼요.";
@@ -697,24 +710,16 @@ $("sendBtn").addEventListener("click", ()=>{
   try{ navigator.share({ title: document.title, url: linkUrl }).catch(()=>{}); }catch(e){}
 });
 $("shareBtn").addEventListener("click", openEditor);
+$("shareTopBtn").addEventListener("click", openEditor);
 $("applyBtn").addEventListener("click", ()=>{
   collect();
   run++; P.forEach(p=>delete sel[p.key]); step = 0; show(0);
 });
 $("resetBtn").addEventListener("click", ()=>{
-  setAll(DEF);
+  own = {}; setAll(DEF); renderLetter();
   try{ localStorage.removeItem(KEY); }catch(e){}
   openEditor();
 });
-/* 디버깅용: Y와 U를 같이 누르면 문구 바꾸기 화면으로 바로 이동 */
-const held = new Set();
-addEventListener("keydown", e=>{
-  if(/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
-  held.add(e.code);
-  if(held.has("KeyY") && held.has("KeyU")){ held.clear(); openEditor(); }
-});
-addEventListener("keyup", e=>held.delete(e.code));
-addEventListener("blur", ()=>held.clear());
 </script>
 </body>
 </html>
