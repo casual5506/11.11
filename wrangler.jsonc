@@ -1,6 +1,7 @@
 {
   // Cloudflare가 public 폴더의 정적 파일을 그대로 서비스한다
-  "name": "11-11",
+  "name": "ppbox",
+  "workers_dev": true,
   "compatibility_date": "2026-11-01",
   "assets": { "directory": "./public" }
 }
