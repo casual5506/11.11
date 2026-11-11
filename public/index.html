@@ -600,16 +600,10 @@ function groups(){
 const allItems = ()=>groups().flatMap(g=>g.items);
 const DEF = {}; allItems().forEach(f=>DEF[f.id] = f.get());
 function setAll(map){ allItems().forEach(f=>{ const v = map[f.id]; if(typeof v==="string" && v.trim()) f.set(v.trim()); }); }
-/* own: 이 브라우저에서 직접 적은 문구만 모아 둔다. 적지 않은 칸은 예시 문구가 쓰인다 */
+/* own: 지금 이 화면에서 직접 적은 문구. 페이지를 다시 열면 비워지고, 적지 않은 칸은 예시 문구가 쓰인다 */
 let own = {};
-function loadOwn(){
-  try{
-    const saved = JSON.parse(localStorage.getItem(KEY) || "null") || {};
-    Object.keys(DEF).forEach(k=>{ if(typeof saved[k]==="string" && saved[k].trim() && saved[k]!==DEF[k]) own[k] = saved[k].trim(); });
-  }catch(e){}
-}
 function applyOwn(){ const all = {}; Object.keys(DEF).forEach(k=>all[k] = own[k] || DEF[k]); setAll(all); }
-loadOwn();
+try{ localStorage.removeItem(KEY); }catch(e){}   /* 예전 버전이 저장해 둔 문구 지우기 */
 /* 링크에 담긴 문구: ?d=... (z=압축, j=그대로) */
 function b64u(bytes){ let t = ""; for(let i=0;i<bytes.length;i++) t += String.fromCharCode(bytes[i]); return btoa(t).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
 function unb64u(str){ const t = atob(str.replace(/-/g,"+").replace(/_/g,"/")); const b = new Uint8Array(t.length); for(let i=0;i<t.length;i++) b[i] = t.charCodeAt(i); return b; }
@@ -670,7 +664,6 @@ function collect(){
     if(v && v!==DEF[f.id]) own[f.id] = v; else delete own[f.id];
   });
   applyOwn();
-  try{ localStorage.setItem(KEY, JSON.stringify(own)); }catch(e){}
   renderLetter();
   return own;
 }
@@ -717,7 +710,6 @@ $("applyBtn").addEventListener("click", ()=>{
 });
 $("resetBtn").addEventListener("click", ()=>{
   own = {}; setAll(DEF); renderLetter();
-  try{ localStorage.removeItem(KEY); }catch(e){}
   openEditor();
 });
 </script>
