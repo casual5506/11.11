@@ -279,7 +279,7 @@ button.env.wig{animation:envwig 1.2s ease-in-out infinite}
     </div>
     <div class="edit" id="edit"></div>
     <div class="linkbox" id="linkBox" hidden>
-      <label for="linkOut">이 링크를 보내면 바꾼 문구로 열려요</label>
+      <label for="linkOut" id="linkNote">이 링크를 보내면 바꾼 문구로 열려요.</label>
       <textarea id="linkOut" rows="2" readonly></textarea>
       <div class="row2">
         <button class="btn ghost" id="copyBtn">링크 복사</button>
@@ -613,9 +613,18 @@ async function unpack(str){
   if(str[0]==="z") raw = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
   return JSON.parse(new TextDecoder().decode(raw));
 }
-const shared = new URLSearchParams(location.search).get("d") || (location.hash.match(/d=([\w-]+)/) || [])[1];
+const params = new URLSearchParams(location.search);
+const shared = params.get("d") || (location.hash.match(/d=([\w-]+)/) || [])[1];
+const sharedId = /^[a-z0-9]{12}$/.test(params.get("k") || "") ? params.get("k") : "";
+function useShared(m){ const safe = {}; Object.keys(m || {}).forEach(k=>{ if(typeof m[k]==="string") safe[k] = m[k].slice(0, 3000); }); setAll(safe); renderLetter(); }
 if(shared){
-  unpack(shared).then(m=>{ const safe = {}; Object.keys(m).forEach(k=>{ if(typeof m[k]==="string") safe[k] = m[k].slice(0, 3000); }); setAll(safe); renderLetter(); }).catch(()=>{});
+  unpack(shared).then(useShared).catch(()=>{});
+}else if(sharedId){
+  /* 문구를 받아올 때까지 시작 버튼을 잠깐 막는다 (최대 5초) */
+  const start = $("startBtn"); start.disabled = true;
+  const open = ()=>{ start.disabled = false; };
+  const timer = setTimeout(open, 5000);
+  fetch("api/get?id=" + sharedId).then(r=>r.ok ? r.json() : null).then(m=>{ if(m) useShared(m); }).catch(()=>{}).then(()=>{ clearTimeout(timer); open(); });
 }else{
   try{ const saved = JSON.parse(localStorage.getItem(KEY) || "null"); if(saved) setAll(saved); }catch(e){}
 }
@@ -655,10 +664,25 @@ let linkUrl = "";
 $("linkBtn").addEventListener("click", async ()=>{
   const keep = collect(), diff = {};
   Object.keys(keep).forEach(k=>{ if(keep[k]!==DEF[k]) diff[k] = keep[k]; });
-  /* 링크마다 끝에 12자 난수를 붙여 서로 겹치지 않게 한다 */
-  const abc = "abcdefghijklmnopqrstuvwxyz0123456789", rnd = crypto.getRandomValues(new Uint8Array(12));
-  let key = ""; for(let i=0;i<12;i++) key += abc[rnd[i] % abc.length];
-  linkUrl = location.origin + location.pathname + "?" + (Object.keys(diff).length ? "d=" + await pack(diff) + "&" : "") + "k=" + key;
+  /* 바꾼 문구는 서버에 저장하고, 링크에는 12자 번호만 넣는다. 저장이 안 되면 문구를 주소에 담은 긴 링크로 대신한다 */
+  const base = location.origin + location.pathname;
+  let note = "이 링크를 보내면 바꾼 문구로 열려요. 문구는 1년 동안 보관돼요.";
+  $("linkBtn").disabled = true;
+  if(!Object.keys(diff).length){
+    linkUrl = base; note = "바꾼 문구가 없어서 기본 링크예요.";
+  }else{
+    try{
+      const r = await fetch("api/save", { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify(diff) });
+      const j = await r.json();
+      if(!r.ok || !/^[a-z0-9]{12}$/.test(j.id || "")) throw new Error("save");
+      linkUrl = base + "?k=" + j.id;
+    }catch(e){
+      linkUrl = base + "?d=" + await pack(diff);
+      note = "짧은 링크를 만들지 못해서 긴 링크로 만들었어요. 이 링크도 그대로 열려요.";
+    }
+  }
+  $("linkBtn").disabled = false;
+  $("linkNote").textContent = note;
   $("linkOut").value = linkUrl;
   $("copyBtn").textContent = "링크 복사";
   $("sendBtn").hidden = !navigator.share;
