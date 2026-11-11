@@ -655,7 +655,10 @@ let linkUrl = "";
 $("linkBtn").addEventListener("click", async ()=>{
   const keep = collect(), diff = {};
   Object.keys(keep).forEach(k=>{ if(keep[k]!==DEF[k]) diff[k] = keep[k]; });
-  linkUrl = location.origin + location.pathname + (Object.keys(diff).length ? "?d=" + await pack(diff) : "");
+  /* 링크마다 끝에 12자 난수를 붙여 서로 겹치지 않게 한다 */
+  const abc = "abcdefghijklmnopqrstuvwxyz0123456789", rnd = crypto.getRandomValues(new Uint8Array(12));
+  let key = ""; for(let i=0;i<12;i++) key += abc[rnd[i] % abc.length];
+  linkUrl = location.origin + location.pathname + "?" + (Object.keys(diff).length ? "d=" + await pack(diff) + "&" : "") + "k=" + key;
   $("linkOut").value = linkUrl;
   $("copyBtn").textContent = "링크 복사";
   $("sendBtn").hidden = !navigator.share;
